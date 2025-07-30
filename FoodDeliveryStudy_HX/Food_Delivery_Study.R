@@ -1,0 +1,1114 @@
+#' ---
+#' editor_options:
+#'   markdown:
+#'     wrap: sentence
+#' bibliography: ./bib/references.bib
+#' output: pdf_document
+#' ---
+#' 
+#' # Introduction
+#' 
+#' For this study, I will dive deep into the [Food Delivery Time](https://www.kaggle.com/datasets/gautamdeora7/food-delivery-time-a-multi-factor-dataset/data) dataset.
+#' The goal of this study is to correctly predict the amount of time (in minutes) that an order will take to get to its destination.
+#' 
+#' ## Dataset and Variables
+#' 
+#' The dataset is made up of 17 variables, described as follows:
+#' 
+#' -   **ID:** Unique identifier for each delivery instance.
+#' 
+#' -   **Delivery_person_ID:** Unique identifier for each delivery person.
+#' 
+#' -   **Delivery_person_Age:** Age of the delivery person.
+#' 
+#' -   **Delivery_person_Ratings:** Customer ratings for the delivery person.
+#' 
+#' -   **Restaurant_latitude:** Geographical latitude coordinate of the restaurant's location.
+#' 
+#' -   **Restaurant_longitude:** Geographical longitude coordinate of the restaurant's location.
+#' 
+#' -   **Delivery_location_latitude:** Latitude coordinate of the delivery location where the order is delivered.
+#' 
+#' -   **Delivery_location_longitude:** Longitude coordinate of the delivery location where the order is delivered.
+#' 
+#' -   **Type_of_order:** Category of food in the order.
+#' 
+#' -   **Type_of_vehicle:** Delivery vehicle.
+#' 
+#' <!-- -->
+#' 
+#' -   **Temperature:** Atmospheric temperature.
+#' 
+#' -   **Humidity:** Humidity level during delivery.
+#' 
+#' -   **Precipitation:** Indication of rain or mist.
+#' 
+#' -   **Weather_description:** Text that describes the weather during delivery.
+#' 
+#' -   **Traffic_Level:** Level of traffic during delivery.
+#' 
+#' <!-- -->
+#' 
+#' -   **Distance..km.:** Distance between restaurant and customer in kilometers.
+#' 
+#' <!-- -->
+#' 
+#' -   **TARGET:** Delivery time in minutes to be predicted.
+#' 
+#' In order to achieve the goal of this study, the data will be passed through an analysis process, in which different variables will undergo modifications and pattern recognition in order to later on build and train two effective machine learning algorithms.
+#' 
+#' The algorithms that will be implemented are:
+#' 
+#' -   Linear Regression
+#' 
+#' -   Random Forest
+#' 
+#' The main metric that will be used to compare both algorithms will be RMSE,
+#' what this does is that it calculates de root of the square differences between
+#' the predicted values and the real (observed) values. This means that a lower RMSE
+#' means a better model (error decreases). This metric is specifically useful
+#' since it also takes into consideration "big errors" that could occur through the
+#' model.
+#' 
+#' 
+#' # Analysis
+#' 
+#' In order to start with the analysis process, it is important to install and import two of the main packages for data cleaning and exploration (`dplyr` and `ggplot2`).
+#' Also, the dataset will be read from the `data/` directory and it's head (first 6 rows) and structure will be printed out in order to get an initial approach to the dataset itself:
+#' 
+## ---------------------------------------------------
+if (!require(dplyr)) install.packages("dplyr")
+library(dplyr)
+
+if (!require(ggplot2)) install.packages("ggplot2")
+library(ggplot2)
+
+data <- read.csv("data/Food_Time_Data_Set.csv")
+
+str(data)
+
+#' 
+#' Looking at the structure of the dataset, there are `chr` values (like string, normal text), `int` values (integers) and `nums` (floating-point numbers), with `logi` being values either TRUE or FALSE (having a similar behavior to `booleans` in other programming languages).
+#' 
+#' Now taking a look into the first 6 rows of the dataset:
+#' 
+## ---------------------------------------------------
+head(data)
+
+#' 
+#' From this we can see that the `ID` and `Delivery_person_ID` are some type of made-up strings that meant something to another database or system possibly.
+#' 
+#' Also, it can be pointed out that there are several categorical variables in the dataset like `traffic_level`.
+#' Additionally, the X column seems to be of no value to the dataset, although this will be studied later on.
+#' 
+#' ## Categorical Columns
+#' 
+#' `Type_of_order` seems to be a categorical column, but by default it has a 'chr' type, so it will be converted into a factor column (since factors are the main way of handling with categorical variables).
+#' The same happens with `type_of_vehicle`, `weather_description` and `traffic_level`, so these columns will also be converted into factors:
+#' 
+## ---------------------------------------------------
+data <- data %>% 
+  mutate(Type_of_order = as.factor(Type_of_order),
+         Type_of_vehicle = as.factor(Type_of_vehicle),
+         weather_description = as.factor(weather_description),
+         Traffic_Level = as.factor(Traffic_Level))
+
+str(data)
+
+#' 
+#' Now the respective variables have their types as `Factor`.
+#' 
+#' ## Numerical columns
+#' 
+#' Most numerical columns seem to be correct except for the TARGET column and the 'Distance..km' columns.
+#' These should be numerical columns so they will be converted into the right type:
+#' 
+## ---------------------------------------------------
+data <- data %>%
+  mutate(Distance..km. = as.numeric(Distance..km.),
+         TARGET = as.numeric(TARGET))
+
+#' 
+#' The conversion was done, but NAs were introduced by coercion (this means that those values that couldn't be converted into a numeric type by R were assinged the `NA` value).
+#' 
+#' Checking to see how much of these values couldn't be converted:
+#' 
+## ---------------------------------------------------
+sum(is.na(data$Distance..km.))
+
+sum(is.na(data$TARGET))
+
+#' 
+#' There were 921 values in the `Distance..km.` column who were assigned `NA` while 961 were assigned `NA` in the `TARGET` column.
+#' 
+#' These amounts seem to be very close to each other, so maybe the `NA` values in `Distance..km.` happen to also affect into an `NA` in `TARGET`?
+#' 
+## ---------------------------------------------------
+data %>% 
+  filter(is.na(Distance..km.) & is.na(TARGET)) %>% 
+  head(.) %>% 
+  select(Delivery_person_ID, Distance..km., TARGET)
+
+#' 
+#' All values shown that have NA in distance also have NA in TARGET.
+#' To see if the result is a value close to 921 (the amount of total NA values in Distance), the amount of rows that have NA in both distance and target will be calculated:
+#' 
+## ---------------------------------------------------
+data %>% 
+  filter(is.na(Distance..km.) & is.na(TARGET)) %>% 
+  summarize(nrow(.))
+
+#' 
+#' These values are not useful towards the model later on because these are values that cannot be predicted at all (the target variable has no value).
+#' As a result, these values will be removed from the dataset:
+#' 
+## ---------------------------------------------------
+data <- data %>%  
+  filter( !(is.na(Distance..km.) & is.na(TARGET)) ) 
+
+#' 
+#' Now, re-calculating the count of na values:
+#' 
+## ---------------------------------------------------
+sum(is.na(data$Distance..km.))
+
+sum(is.na(data$TARGET))
+
+#' 
+#' The counts of `NA` values decreased by a big margin, leaving only 5 and 45 in `Distance..km.` and `TARGET` respectively.
+#' 
+#' Analyzing the remaining `Distance..km.` `NA` values:
+#' 
+## ---------------------------------------------------
+data %>% 
+  filter(is.na(Distance..km.))
+
+#' 
+#' It seems that all of the other needed values are still there for these rows, so I will use the restaurant coordinates vs. the delivery location coordinates to fill the distance: @esri_haversine @geosphere
+#' 
+## ---------------------------------------------------
+if(!require(geosphere)) install.packages("geosphere", repos = "http://cran.us.r-project.org")
+
+library(geosphere)
+
+new_distances <- data %>%
+  filter(is.na(Distance..km.)) %>% 
+  rowwise() %>%
+  mutate(new_distance = distHaversine(c(Restaurant_longitude, Restaurant_latitude),
+            c(Delivery_location_longitude, Delivery_location_latitude)) / 1000) %>% 
+  head(.) %>% 
+  select(Distance..km.,
+         new_distance,
+         Restaurant_latitude, 
+         Restaurant_longitude, 
+         Delivery_location_latitude, 
+         Delivery_location_longitude,
+         TARGET) %>% 
+  pull(new_distance)
+
+data[is.na(data$Distance..km.), "Distance..km."] <- new_distances
+
+sum(is.na(data$Distance..km.))
+
+rm(new_distances)
+
+#' 
+#' It can be seen that now there's no more NA values in the Distance..km.
+#' column.
+#' Now analyzing the leftover `TARGET` `NA` values:
+#' 
+## ---------------------------------------------------
+sum(is.na(data$TARGET))
+
+head(data[is.na(data$TARGET),])
+
+#' 
+#' The amount of rows that will be in the na-cleaned dataset is:
+#' 
+## ---------------------------------------------------
+nrow(data) - sum(is.na(data$TARGET))
+
+#' 
+#' There are 45 missing values in the target variable, because the goal of this study is to train the algorithm on the most accurate data available, then the best option for these NA values is to delete them, since filling them in any way can introduce an incorrect bias that could prevent the model from learning correct patterns from the data.
+#' 
+## ---------------------------------------------------
+data <- data[!is.na(data$TARGET),]
+
+nrow(data)
+
+#' 
+#' The resulting row count after deleting the rest of `NA` values in the dataset is 9040.
+#' 
+#' Variable names In the provided dataset there's no standard naming convention for the columns, some start with a capital letter while others don't and some are in all-caps (TARGET and ID) while others aren't.
+#' 
+#' In order to fix this, all columns will be renamed to non-caps format.
+#' 
+## ---------------------------------------------------
+colnames(data) <- c("id", "delivery_person_id", "delivery_person_age", "delivery_person_ratings",
+  "restaurant_latitude", "restaurant_longitude", "delivery_loc_latitude",
+  "delivery_loc_longitude", "order_type", "vehicle_type", "temperature", "humidity",
+  "precipitation", "weather_type", "X", "traffic_level", "distance", "delivery_time_min")
+
+str(data)
+
+#' 
+#' Now there's a more uniform column name standard.
+#' 
+#' ## Per-Column Analysis
+#' 
+#' ### ID Variable
+#' 
+#' Checking the amount of distinct values in `id` vs. the amount of rows in the dataset:
+#' 
+## ---------------------------------------------------
+n_distinct(data$id)
+
+nrow(data)
+
+#' 
+#' Interistingly, there are less distinct ID values (9037) than rows (9040).
+#' 
+#' Checking the occurrences of duplicate `id` entries:
+#' 
+## ---------------------------------------------------
+data %>% 
+  group_by(id) %>% 
+  summarize(appearances = n()) %>% 
+  arrange(desc(appearances))
+
+data %>% 
+  filter(id == "6.00E+02")
+
+#' 
+#' There don't seem to be any abnormal values, the only remarkable detail is that the coordinates of both the restaurant and the delivery destination are similar between entries.
+#' 
+#' Looking at another `id` that appears more than once:
+#' 
+## ---------------------------------------------------
+data %>% 
+  filter(id == "6.00E+03")
+
+#' 
+#' Again the coordinates are similar, but that's about it.
+#' 
+#' Looking at yet another repeated `id`.
+#' 
+## ---------------------------------------------------
+data %>% 
+  filter(id == "9.00E+02")
+
+#' 
+#' In here the longitudes between rows vary greatly, but the latitudes do kind of match.
+#' In these code blocks the ages of the delivery people differ, so the 'id' itself isn't a unique person identifier.
+#' 
+## ---------------------------------------------------
+sum(is.na(data$id))
+
+#' 
+#' There are no null values in `id`.
+#' 
+#' ### Delivery Person ID
+#' 
+#' Looking at the identifiers of each delivery person now:
+#' 
+## ---------------------------------------------------
+head(data$delivery_person_id, n=8)
+
+n_distinct(data$delivery_person_id)
+
+#' 
+#' In this dataset there's only 1134 different delivery people, meaning that the dataset has multiple deliveries from a single person.
+#' 
+## ---------------------------------------------------
+sum(is.na(data$delivery_person_id))
+
+#' 
+#' There are no null values in `delivery_person_id`.
+#' 
+#' ### Delivery Person Age
+#' 
+#' Looking at the age of the delivery people now:
+#' 
+## ---------------------------------------------------
+head(data$delivery_person_age, n=8)
+
+min(data$delivery_person_age)
+
+max(data$delivery_person_age)
+
+#' 
+#' The ages of the delivery people range from 15 to 50.
+#' 
+## ---------------------------------------------------
+data %>% 
+  filter(delivery_person_age == 15)
+
+#' 
+#' There's 4 entries of a 15-year-old doing deliveries, each with a different `delivery_person_id`.
+#' 
+## ---------------------------------------------------
+data %>% 
+  filter(delivery_person_age == 50)
+
+#' 
+#' There are also 3 entries of a 50 year old delivering, with 2 different `delivery_person_id` values.
+#' 
+## ---------------------------------------------------
+data %>% 
+  ggplot(aes(delivery_person_age)) +
+  geom_histogram(col = "black", fill = "turquoise")
+
+#' 
+#' Most ages range from 20 to 40, with 15 and the 50 being the outliers.
+#' However, this graph can be wrong due to the fact that takes multiple deliveries as a different count for the age.
+#' 
+## ---------------------------------------------------
+data %>% 
+  distinct(delivery_person_id, .keep_all = TRUE) %>% # grabbing different people or else multiple deliveries would count as multiple ages
+  ggplot(aes(delivery_person_age)) +
+  geom_histogram(col = "black", fill = "turquoise")
+
+#' 
+#' With this graph, the scale changes and now the 15 and 50 values don't appear.
+#' Could this be due to the fact that the same `delivery_person_id` has multiple ages assigned to it (in this case this would be human error)?
+#' 
+## ---------------------------------------------------
+data %>% 
+  filter(delivery_person_id == "JAPRES15DEL03") %>% 
+  select(delivery_person_age)
+
+#' 
+#' This is a big issue, there are multiple ages assigned to the same `delivery_person_id` (JAPRES15DEL03).
+#' Is this a common mistake?
+#' Does this happen for each `delivery_person_id`?
+#' 
+## ---------------------------------------------------
+data %>% 
+  group_by(delivery_person_id) %>% 
+  distinct(delivery_person_age) %>% 
+  summarize(distinct_ages = n())
+
+#' 
+#' This is indeed a common mistake, since the docs for this dataset mention:
+#' 
+#' -   "**Delivery_person_ID:** A unique identifier assigned to each delivery person for tracking purposes."
+#' 
+#' So, the Delivery_person_ID isn't a reliable identifier for a singular person.
+#' Therefore, an accurate count of each age's different workers (delivery person) cannot be obtained.
+#' 
+#' A possible cause for this is that the program made to assign `delivery_person_id`'s to workers isn't meant to generate one per worker, instead it could've been made to generate one per delivery in real-time, and when one `delivery_person_id` is no longer in use, then it could re-assign it to another delivery, hence another possible driver.
+#' 
+#' Checking to see if the driver's age has something to do with the delivery time:
+#' 
+## ---------------------------------------------------
+data %>% 
+  ggplot(aes(delivery_person_age, delivery_time_min)) +
+  geom_point(col = "black")
+
+#' 
+#' There's no clear effect of the age on the delivery time.
+#' 
+#' ### Delivery Person Ratings
+#' 
+## ---------------------------------------------------
+min(data$delivery_person_ratings)
+
+max(data$delivery_person_ratings)
+
+#' 
+#' The rating scale is from 1 to 6, inclusive.
+#' This rating scale seems to deviate from 'normal' scales in the sense that most delivery apps (or other apps in genreal) have a 1-5 scale or a 1-10 scale, but a 1-6 scale is very uncommon.
+#' 
+## ---------------------------------------------------
+data %>% 
+  ggplot(aes(delivery_person_ratings)) +
+  geom_histogram(col = "black", fill = "turquoise")
+
+#' 
+#' Most delivery people have a rating between 3 and 5.
+#' With the other ratings having very low counts.
+#' 
+## ---------------------------------------------------
+data %>% 
+  filter(delivery_person_ratings > 5)
+
+#' 
+#' An interesting detail is that the only delivery people who have a rating bigger than 5 (6 rating) are 50 year-olds.
+#' However, due to the recent findings stating that the `delivery_person_id` variable cannot correctly identify singular people, this is most likely a single person that is 50 years old that somehow has this 6 rating.
+#' So again, an accurate count of the number of distinct people (in order to count the amount of people per rating) cannot be obtained.
+#' 
+#' Looking at the possible effect of ratings on delivery time:
+#' 
+## ---------------------------------------------------
+data %>% 
+  ggplot(aes(x = delivery_person_ratings, y = delivery_time_min)) +
+  geom_point(col = "black")
+
+#' 
+#' The rating itself doesn't seem to have an effect on delivery time since all ratings deliver on very similar timeframes.
+#' 
+#' ### Restaurant Latitude and Longitude
+#' 
+#' Latitude and longitude values can be very raw, they just specify coordinates on a map.
+#' However, if a latitude and longitude pairing appears several times in a repeated manner, this means that there are several orders for the same restaurant (since the latitude and longitude pairing uniquely identifies the position of a specific restaurant).
+#' This technically assumes that no restaurant can be on top of another (this is very common in malls for example), so this is only to get an idea on the amount of deliveries that possibly come from the same restaurant.
+#' 
+#' This will be studied further to see if most people order from the same restaurant and therefore that restaurant needs more time than others in order to prepare the food.
+#' 
+## ---------------------------------------------------
+options(pillar.sigfig = 6)
+
+data %>% 
+  group_by(restaurant_latitude, restaurant_longitude) %>% 
+  summarize(order_count = n()) %>% 
+  arrange(desc(order_count))
+
+#' 
+#' 54 orders seem to be from the same restaurant, 48 from another and so on.
+#' It is important to compare the average delivery time of this popular restaurant with one that has a low delivery count to see if these coordinate pairings introduce a bias on the target variable (delivery time).
+#' 
+## ---------------------------------------------------
+data <- data %>% 
+  mutate(restaurant_latitude = round(restaurant_latitude, 4),
+         restaurant_longitude = round(restaurant_longitude, 4))
+
+data %>% 
+  filter(restaurant_latitude == 11.0213 & restaurant_longitude == 76.995) %>% 
+  summarize(mean_delivery_time = mean(delivery_time_min))
+
+#' 
+#' The most sought-out restaurant has a mean delivery time of almost 35 minutes.
+#' 
+#' Making the same calculation for the restaurant with the lowest order count:
+#' 
+## ---------------------------------------------------
+data %>% 
+  group_by(restaurant_latitude, restaurant_longitude) %>% 
+  summarize(order_count = n()) %>% 
+  arrange(order_count)
+
+data %>% 
+  filter(restaurant_latitude == 9.9668 & restaurant_longitude == 76.243) %>% 
+  summarize(mean_delivery_time = mean(delivery_time_min))
+
+#' 
+#' One of the least ordered restaurant has almost a 36 minute delivery time.
+#' The average time of both restaurants is extremely similar, indicating that there isn't a 'delay' effect by ordering from a 'popular' restaurant in this case.
+#' 
+#' ### Delivery Latitude and Longitude
+#' 
+#' Here we encounter the same effect on these values as before, these coordinate values are very raw so the amount of orders that came from the same home will be calculated.
+#' Again, this assumes that no home can be on top of another, and this is almost the normal way of living inside of capital cities, where renting an apartment is common.
+#' 
+## ---------------------------------------------------
+data <- data %>% 
+  mutate(delivery_loc_latitude = round(delivery_loc_latitude, 4),
+         delivery_loc_longitude = round(delivery_loc_longitude, 4))
+
+data %>% 
+  group_by(delivery_loc_latitude, delivery_loc_longitude) %>% 
+  summarize(order_count = n()) %>% 
+  arrange(desc(order_count))
+
+#' 
+#' There are several 'homes' that ordered 9 times in this data.
+#' 
+#' ### Order Type
+#' 
+#' Taking a glance at only the `order_type` column:
+#' 
+## ---------------------------------------------------
+head(data$order_type, n=8)
+
+#' 
+#' It can be seen that this majorly describes what the order is mostly comprised of (drinks, meal, etc.).
+#' 
+## ---------------------------------------------------
+data %>% 
+  group_by(order_type) %>% 
+  summarize(appearances = n(), avg_delivery_time = mean(delivery_time_min)) %>% 
+  arrange(desc(appearances))
+
+#' 
+#' Thanks to the output, it can be seen that the most common order type is the snack, followed by meal, drinks and buffet being the last one.\
+#' 
+#' It can be also inferred that ordering drinks usually takes longer than ordering meals, this could be due to the fact that these could be low-income orders, so restaurant managers could give a higher priority to meals since these usually cost more than just drinks.
+#' So the order type does matter when predicting the average delivery time.
+#' 
+#' ### Vehicle Type
+#' 
+#' Looking at the `vehicle_type` column:
+#' 
+## ---------------------------------------------------
+head(data$vehicle_type, n=8)
+
+#' 
+#' These values are very self-explanatory, describing the transportation method of the delivery person.
+#' 
+## ---------------------------------------------------
+data %>% 
+  group_by(vehicle_type) %>% 
+  summarize(appearances = n(), avg_delivery_time = mean(delivery_time_min)) %>% 
+  arrange(desc(appearances))
+
+#' 
+#' Interestingly enough, bicycle deliveries are the ones that have the least amount of average delivery time out of the four.
+#' This could be due to bicycle riders not taking up on large rides (in the sense of accepting deliveries from users that are far away from the restaurant) due to the increased physicality needed.
+#' This added physicality can also explain the low amount of people that use it for delivery purposes.
+#' This will be calculated for verification:
+#' 
+## ---------------------------------------------------
+data %>% 
+  group_by(vehicle_type) %>% 
+  summarize(appearances = n(),
+            avg_delivery_time = mean(delivery_time_min),
+            delivery_distance = mean(distance)) %>% 
+  arrange(desc(appearances))
+
+#' 
+#' As it was hinted at previously, the bicycle riders indeed have a lower average delivery distance when compared to motorcycle riders for example.
+#' An interesting remark are the scooter riders.
+#' While using a scooter does include physicality during work (but not as much as bicycles do), it still remains the second most-used vehicle type for food transportation.
+#' 
+#' All of this hints at the possibility of the `vehicle_type` having an impact on delivery time.
+#' 
+#' ### Temperature
+#' 
+#' Looking at the first 8 rows of the temperature column:
+#' 
+## ---------------------------------------------------
+head(data$temperature, n=8)
+
+#' 
+#' These temperatures seem to be in Celsius rather than Fahrenheit.
+#' This isn't clarified in the documentation for the dataset.
+#' However, this can be confirmed through the average temperatures of planet earth @nasa_solar_temp .
+#' 
+## ---------------------------------------------------
+data %>% 
+  ggplot(aes(temperature)) +
+  geom_histogram(fill = "turquoise", col = "black")
+
+#' 
+#' Most temperatures seem to be around de 22.5 mark.
+#' Heat could introduce laziness and exhaustion for the delivery drivers, so it wouldn't be abnormal to see that higher temperatures lead to higher delivery times @heat_source .
+#' 
+## ---------------------------------------------------
+data %>% 
+  ggplot(aes(x = delivery_time_min, y = temperature)) +
+  geom_point(fill = "turquoise", col = "black")
+
+#' 
+#' It is surprising to see that the most heated deliveries are the ones who usually have lower delivery times.
+#' However, an argument can be made that states that this could be because people that live closer to these restaurants have a hotter climate than those who live further away.
+#' Things like the heat from gas car engines are prejudicial for the climate (therefore generating hotter temperatures).
+#' 
+#' So, the temperature does seem to correlate to the delivery time (although the effect is very low), but it does so in the contrary sense to the one thought before.
+#' 
+#' ### Humidity
+#' 
+#' Taking a look at the first 6 rows of `humidity`, as well as the minimum and maximum data values:
+#' 
+## ---------------------------------------------------
+head(data$humidity)
+
+min(data$humidity)
+
+max(data$humidity)
+
+#' 
+#' The values of the humidity seem to be percentages (this is the usual metric for the general population).
+#' This is another detail that isn't mentioned in the documentation of the dataset.
+#' 
+## ---------------------------------------------------
+data %>% 
+  ggplot(aes(humidity)) +
+  geom_histogram(fill = "turquoise", col = "black")
+
+#' 
+#' As per the histogram, it can be seen that the humidity values seem to be pretty scattered, there's no bell-like shaped curve present in the graph.
+#' 
+## ---------------------------------------------------
+data %>% 
+  ggplot(aes(x = delivery_time_min, y = humidity)) +
+  geom_point(col = "black")
+
+#' 
+#' No clear pattern can be extracted on the effect of humidity on delivery time since the values are very visually scattered.
+#' 
+#' ### Precipitation
+#' 
+#' Looking at the first values as well as the amount of distinct values in `precipitation`:
+#' 
+## ---------------------------------------------------
+head(data$precipitation, n = 8)
+
+n_distinct(data$precipitation)
+
+#' 
+#' There are 5 distinct values in all of the `precipitation` column, this means that this specific column doesn't have a binary behavior.
+#' 
+## ---------------------------------------------------
+min(data$precipitation)
+
+max(data$precipitation)
+
+#' 
+#' The `precipitation` values range from 0 to 1.46.
+#' The details about the scale used here also are not present in the docs.
+#' 
+## ---------------------------------------------------
+data %>% 
+  ggplot(aes(x = precipitation)) +
+  geom_histogram(fill = "turquoise", col = "black")
+
+#' 
+#' The most prominent precipitation value is zero (no rain or snow).
+#' All of the other values on the scale barely appear, being almost a line at the bottom of the graph.
+#' 
+#' Inspecting those values different to zero:
+#' 
+## ---------------------------------------------------
+data %>% 
+  filter(precipitation != 0)
+
+#' 
+#' There's just 1 entry that has a `precipitation` value bigger than 1, but this entry marks the weather as "moderate rain", so values bigger than 1 mean that there's definite rain (and not mist) and the .46 shows how heavy the rainfall is.
+#' 
+## ---------------------------------------------------
+data %>% 
+  ggplot(aes(x = delivery_time_min, y = precipitation)) +
+  geom_point(col = "black")
+
+#' 
+#' Watching the scatterplot, no clear pattern between the precipitation and the delivery time can be extracted.
+#' 
+#' ### Weather Type
+#' 
+## ---------------------------------------------------
+data %>% 
+  ggplot(aes(x = weather_type, y = precipitation)) +
+  geom_boxplot(fill = "turquoise", col = "black") +
+  theme(axis.text.x = element_text(angle = 90))
+
+#' 
+#' The only weather types to have non-zero values are mist and moderate rain.
+#' 
+#' Plotting the possible effect of the weather type on delivery time:
+#' 
+## ---------------------------------------------------
+data %>% 
+  ggplot(aes(x = weather_type, y = delivery_time_min)) +
+  geom_boxplot(fill = "turquoise", col = "black") +
+  theme(axis.text.x = element_text(angle = 90))
+
+#' 
+#' The weather_type seems to have an extremely little effect on delivery time (see fog, moderate rain and overcast clouds), but the difference is so small that this could introduce almost no effect over the model.
+#' 
+#' ### 'X' Column
+#' 
+#' Looking at this unnamed column:
+#' 
+## ---------------------------------------------------
+head(data$X)
+
+n_distinct(data$X)
+
+#' 
+#' There is only 1 value in the column and it is NA.
+#' 
+#' Making a query to determine if there are non-NA row values:
+#' 
+## ---------------------------------------------------
+data %>% 
+  filter(!is.na(X))
+
+#' 
+#' The filter returned 0 rows.
+#' Therefore, this column serves no purpose and it will be discarded from the dataset:
+#' 
+## ---------------------------------------------------
+data <- data %>% 
+  select(-X) 
+
+#' 
+#' ### Traffic Level
+#' 
+#' Naturally, traffic is a great cause for arriving late to a location, however, because the vehicle types here aren't 4 wheeled then I expect the traffic level to have little to no effect on the delivery time.
+#' 
+## ---------------------------------------------------
+data %>% 
+  ggplot(aes(x = reorder(traffic_level, delivery_time_min, FUN = median), y = delivery_time_min)) +
+  geom_boxplot(fill = "turquoise", col = "black") +
+  labs(x = "Traffic Level",
+       y = "Delivery Time (m)")
+
+#' 
+#' Despite the vehicle types in the dataset being 2-wheeled, the traffic does have quite a clear correlation with the delivery time.
+#' 
+#' This means that the `traffic_level` does have an effect in the delivery time.
+#' 
+#' ### Distance
+#' 
+## ---------------------------------------------------
+mean(data$distance)
+
+#' 
+#' The average distance traveled by the delivery people is around 14 kilometers.
+#' 
+## ---------------------------------------------------
+data %>% 
+  ggplot(aes(distance)) + 
+  geom_histogram(fill = "turquoise", col = "black")
+
+#' 
+#' Shorter distances are more common than longer distances.
+#' This is actually the expected behavior of the data because different apps have a threshold on the maximum amount of kilometers that the restaurant can be away from the user that is making the order.
+#' 
+#' The distance itself is naturally a big factor in arrival time to a destination everywhere in the world so I expect this behavior to apply here:
+#' 
+## ---------------------------------------------------
+data %>% 
+  ggplot(aes(x = distance, y = delivery_time_min)) + 
+  geom_point(col = "black") 
+
+#' 
+#' There is a clear line-like pattern between distance and delivery time, as I expected.
+#' The bigger the distance, the greater the delivery time.
+#' 
+#' ### Delivery Time
+#' 
+#' This is the target variable.
+#' This variable measures the delivery time in minutes from the point of making the order to the point of receiving it.
+#' 
+## ---------------------------------------------------
+mean(data$delivery_time_min)
+
+#' 
+#' People usually have to wait around 38 minutes for their food delivery in this specific dataset.
+#' 
+## ---------------------------------------------------
+data %>% 
+  ggplot(aes(delivery_time_min)) + 
+  geom_histogram(fill = "turquoise", col = "black")
+
+#' 
+#' Usually, extremely quick deliveries are rare, as well as extremely delayed ones, with the middleground being more common.
+#' This 'natural' behavior is seen in the histogram.
+#' 
+#' ## Handling Missing Data
+#' 
+#' Although it is true that a lot of missing data was handled at the start of the analysis section, the presence of these NA values will be checked again in order to discard any possible unwanted behavior.
+#' 
+## ---------------------------------------------------
+sum(is.na(data))
+
+#' 
+#' There's no missing data in the whole dataset.
+#' As it was mentioned above, this is greatly due to the work done at the start of this section.
+#' 
+#' ## Handling Inconsistent Values
+#' 
+#' It was pointed out before that the `delivery_person_id` column is basically made up of inconsistent values (not the expected behavior for this study) since it can't correctly identify a singular delivery person.
+#' 
+#' As a reminder, the rows will be grouped by `delivery_person_id` and the amount of different ages assigned to that `delivery_person_id` will be printed out:
+#' 
+## ---------------------------------------------------
+data %>% 
+  group_by(delivery_person_id) %>% 
+  distinct(delivery_person_age) %>% 
+  summarize(distinct_ages = n())
+
+#' 
+#' Again, it can be seen that the `deliery_person_id` AGRRES010DEL01 is assigned to two different age numbers, symbolizing different people.
+#' 
+#' These reasons set the ground for the explanation on the elimination of the `delivery_person_id` column from the dataset:
+#' 
+## ---------------------------------------------------
+data <- data %>% 
+  select(-delivery_person_id)
+
+#' 
+#' The `id` column was also shown to be of little value to the current study, having no specific meaning over the dataset.
+#' 
+#' Showing the amount of times that the same `id` appears in the dataset:
+#' 
+## ---------------------------------------------------
+data %>%
+  group_by(id) %>%
+  summarize(appearances = n()) %>%
+  arrange(desc(appearances))
+
+#' 
+#' There are multiple `id`'s that appear more than once.
+#' The first `id` that appears will be grabbed for analysis:
+#' 
+## ---------------------------------------------------
+data %>%
+  filter(id == "6.00E+02")
+
+#' 
+#' Here the same id is assigned to different people and different deliveries, confirming the fact that this column is of little value for the data observations.
+#' 
+#' The `id` column will be removed:
+#' 
+## ---------------------------------------------------
+data <- data %>% 
+  select(-id)
+
+#' 
+#' Looking at the new structure of the dataset and checking for duplicate entries:
+#' 
+## ---------------------------------------------------
+str(data)
+
+sum(duplicated(data))
+
+#' 
+#' There are no duplicate entries in the data and the `id` column no longer appears as part of the structure of the dataset.
+#' 
+#' ## Dataset Split
+#' 
+#' In order to correctly apply the AI/ML models in the data, a division is needed (between training and testing) in order to evaluate the model later on on simulated "unseen" data.
+#' 
+#' The split will be done as follows:
+#' 
+#' First, the seed will be set to the current year (2025, this could be any number) to establish reproducible results (because the partition is done "randomly").
+#' 
+#' -   `train_data`: dataset used for model training, is comprised of the 80% of the original `data`
+#' 
+#' -   `test_data`: dataset used for model evaluation, comprised of the 20% of the original `data`
+#' 
+## ---------------------------------------------------
+if (!require(caret)) install.packages("caret")
+library(caret)
+
+set.seed(2025)
+
+train_indexes <- createDataPartition(data$delivery_time_min, p = 0.8, list = FALSE)
+train_data <- data[train_indexes,]
+test_data <- data[-train_indexes,]
+
+#' 
+#' ## Outlier Deletion
+#' 
+#' No outliers will be deleted since important features like the `distance` correlate very well and give good insights for predicting the delivery time in specific situations (for example long distances mean longer delivery times).
+#' Deleting these values could affect the pattern-learning process of the future models.
+#' 
+#' ## Data Scaling
+#' 
+#' The models that are going to be trained are:
+#' 
+#' -   Linear Regression
+#' 
+#' -   Random Forest
+#' 
+#' Both of these models are not sensible to the scale of the values that they will be trained on.
+#' In this context, the scale of the values determine the range in which all of the numerical observations fall in.
+#' 
+#' Considering this and the benefit of the understandability in features as well as the target variable, the dataset will not be scaled (neither normalized or standardized).
+#' 
+#' ## Feature Selection
+#' 
+#' Along this analysis section, each variable was studied with its effect on the target variable.
+#' This was done in order to evaluate whether that specific variable could be a possible predictor for the delivery time duration.
+#' 
+#' In order to confirm the findings and solidify the inferences made, the correlation between each variable will be calculated.
+#' With this, a "correlation heatmap" can be done in order to visually examine the magnitude of the correlations between variables.
+#' 
+#' It is important to mention that these correlation calculations will be done on numerical data only, so filtering of these is needed first.
+#' 
+## ---------------------------------------------------
+nums <- lapply(data, is.numeric)
+nums <- unlist(nums)
+
+head(data[, nums])
+
+
+correlation_matrix <- cor(data[,nums])
+head(correlation_matrix)
+
+#' 
+#' These values contain a lot of numbers, so rounding will be used again here for ease-of-read purposes.
+#' The rounding will be done to 2 decimal places.
+#' 
+## ---------------------------------------------------
+correlation_matrix <- round(correlation_matrix, 2)
+
+head(correlation_matrix)
+
+#' 
+#' Converting the data into a long format (it's currently as a wide format since each variable is put as a column):
+#' 
+## ---------------------------------------------------
+if (!require(reshape2)) install.packages("reshape2")
+library(reshape2)
+
+correlation_matrix <- melt(correlation_matrix)
+
+head(correlation_matrix)
+
+#' 
+#' Now it can be seen that the relationships between variables are described in just 2 columns, rather than a lot more (as it was before).
+#' Now creating a correlation heatmap:
+#' 
+## ---------------------------------------------------
+correlation_matrix %>% 
+  ggplot(aes(x = Var1, y = Var2, fill = value)) +
+  geom_tile() +
+  theme(axis.text.x = element_text(angle = 90),
+        axis.title = element_blank())
+
+#' 
+#' It can be seen that distance itself has the lightest color out of all of the possible features, with temperature being the next-lightest.
+#' This was hinted at in during the EDA process where both variables were examined (including their effect on delivery time).
+#' So, thanks to the EDA and the confirmation of this heatmap, the features of the model will be:
+#' 
+#' -   `order_type`
+#' 
+#' -   `vehicle_type`
+#' 
+#' -   `temperature`
+#' 
+#' -   `weather_type`
+#' 
+#' -   `traffic_level`
+#' 
+#' -   `distance`
+#' 
+#' ## Model Implementation
+#' 
+#' As aforementioned, the two models that will be trained and evaluated are:
+#' 
+#' -   Linear Regression
+#' 
+#' -   Random Forest
+#' 
+#' These models will be trained on the `train_data` and evaluated on the `test_data` using RMSE as the metric.
+#' 
+#' ### Linear Regression
+#' 
+#' Linear Regression is the simplest machine learning model for regression tasks.
+#' Regression tasks are those that predict a single numerical value (either floating point or integer), for example, predicting the amount of hours of sleep of an individual.
+#' 
+#' This is done by tracing a line across the target variable and whenever the model encounters a new value, it uses the features to know where in the line the new value should fall into.
+#' 
+#' More explicitly, it does this by assigning a "weight" to the predictor variables (since predictors like `distance` should be more influential than `order_type` for example).
+#' 
+## ---------------------------------------------------
+lr_model <- lm(delivery_time_min ~ order_type + vehicle_type + temperature + weather_type +
+     traffic_level + distance, data = train_data)
+summary(lr_model)
+
+if (!require(Metrics)) install.packages("Metrics")
+library(Metrics)
+
+y_hat_lr <- predict(lr_model, newdata = test_data)
+
+rmse(test_data$delivery_time_min, y_hat_lr)
+
+#' 
+#' The resulting Root Mean Squared Error from the Linear Regression model is 5.3
+#' 
+#' This means that the model averagely misses its prediction by 5 minutes.
+#' Considering the fact that people usually wait around 36 minutes for their food (calculated above), this error isn't big enough to discard the model.
+#' In fact, this model could be extremely useful for new upcoming delivery app companies to incorporate an ETA of the food while needing low computational power and energy.
+#' 
+#' ### Random Forest
+#' 
+#' Random Forest is a different type of Machine Learning algorithm compared to Linear Regression.
+#' What this algorithm does is that it creates multiple *decision trees* and takes the average resulting value from these trees generating a prediction.
+#' A decision tree what does is that it generates a prediction based on different thresholds from the features used in the model.
+#' For example if a person's height is higher than 1.7 meters, guess that the person's age is 25.
+#' 
+#' This approach is more computationally expensive and costly than using Linear Regression, but by doing this, this model is able to learn more complicated patterns in data that aren't necessarily linear.
+#' 
+#' First, the random forest package needs to be installed and loaded in order to train the random forest model:
+#' 
+## ---------------------------------------------------
+if (!require(randomForest)) install.packages("randomForest")
+library(randomForest)
+
+#' 
+#' For this model, cross validation will be applied.
+#' What this does is that it divides the dataset into k folds, and it trains the model on k-1 folds while it evaluates it on the remaining fold.
+#' It does this k times so that each fold serves as the evaluation fold at least once.
+#' 
+#' Setting up k as 10 for k-fold cross validation:
+#' 
+## ---------------------------------------------------
+train_control <- trainControl(method = "cv",
+                              number = 10)
+
+#' 
+#' Training the model on the `train_data` dataset:
+#' 
+## ---------------------------------------------------
+rf_model <- train(delivery_time_min ~ order_type + temperature + weather_type + traffic_level + distance,
+                  data = train_data,
+                  method = "rf",
+                  trControl = train_control)
+rf_model
+
+plot(varImp(rf_model))
+
+y_hat_rf <- predict(rf_model, newdata = test_data)
+
+rmse(test_data$delivery_time_min, y_hat_rf)
+
+#' 
+#' The lowest RMSE obtained during training for the random forest model is 3.577116, with an `mtry` value of 23.
+#' Along with this, the RMSE of the predictions on the testing set was also calculated, and the obtained value is 3.642145.
+#' This value is significantly lower than the 5.301928 RMSE that Linear Regression yields.
+#' 
+#' It can also be seen that the most influential variable while predicting delivery time in random forest is the traffic level, especially when this variable has the "Very High" traffic value, with `distance` being the second most important variable after that level of traffic.
+#' 
+#' # Results
+#' 
+#' After doing an extensive analysis section that studied each variable along with its intrinsic patterns, correlations with the target variable and inconsistencies, the best correlated features (variables) were selected.
+#' The selected features were:
+#' 
+#' -   `order_type`
+#' 
+#' -   `vehicle_type`
+#' 
+#' -   `temperature`
+#' 
+#' -   `weather_type`
+#' 
+#' -   `traffic_level`
+#' 
+#' -   `distance`
+#' 
+#' These features were used by a Linear Regression model and a Random Forest model.
+#' After training both models, the RMSE between them was compared in order to gather a consistent metric that permitted a correct and objective selection of the best model.
+#' 
+#' The resulting RMSE's are the following:
+#' 
+#' -   **Linear Regression:** Less computationally expensive, RMSE = 5.301928.
+#' 
+#' -   **Random Forest:** More computationally expensive, RMSE = 3.642145.
+#' 
+#' Both of these RMSE's reported are the RMSE values that result when comparing the actual testing data to the model's predictions.
+#' 
+#' From this, it can be seen that the Random Forest model is the clear winner in this case, having a RMSE that is lower than the Linear Regression counterpart by 1.659783.
+#' 
+#' # Conclusion
+#' 
+#' This study analyzed the effects of different factors that come into play when a delivery of food is made to a specific home.
+#' Characteristics such as the type of food that is included in the order, the type of vehicle that the food will be delivered in, the ambient temperature while delivering, the weather, traffic level and distance proved to be good predictors for the duration time of a specific food delivery.
+#' 
+#' Before I mentioned how this model could benefit up and coming apps on the food delivery industry so that the end user (the one who initially ordered) can get an idea of how much the food is going to take getting to the destination (they could be ordering from work or home).
+#' 
+#' Additionally, this approach can also be fine-tuned to fit more and possibly more complex use cases.
+#' For example, a package delivery company that sends letters, boxes and more across a country, can use this model in order to know how much time the package is going to take to get to its destination based on traffic level, type of package (fragile, non-fragile, flammable, etc.) and more features.
+#' 
+#' A limitation of the current model is that it doesn't take into consideration the time of day when the order was made.
+#' This could've been a great feature to consider, since standard meal times (breakfast, lunch and dinner) are the times when the restaurants are the most filled up.
+#' 
+#' Another improvement that can be made to the dataset (and also the model) is adding a restaurant ID along with the observations.
+#' This is because, as I mentioned, in malls and shopping places the restaurants are usually on top of another, so only coordinates aren't a reliable source of restaurant identification.
+#' 
+#' Along with this, restaurant rating can be added to know whether specific restaurants have low order counts due to their bad food or their lack of good service times.
+#' 
+#' # References
